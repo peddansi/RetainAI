@@ -10,8 +10,8 @@ At-risk customers: 1,303 | 50,000 simulated arrivals x 3 seeds
 | Always LOYALTY_DISCOUNT |                     452.32 |             -21.12 |        2.09061e+06 |                          41.75 |
 | Random eligible offer   |                     472.94 |              -0.5  |        1.01571e+06 |                          20.26 |
 | Business rule           |                     485.39 |              11.95 |   424676           |                           8.5  |
-| LinUCB                  |                     485.1  |              11.66 |   434450           |                           6.87 |
-| Thompson sampling       |                     477.18 |               3.74 |   748630           |                          12.71 |
+| LinUCB                  |                     484.94 |              11.51 |   460042           |                           8.02 |
+| Thompson sampling       |                     483.78 |              10.34 |   474617           |                           7.1  |
 | Oracle                  |                     493.78 |              20.34 |        0           |                           0    |
 
 ## Final learned policy (noise-free)
@@ -20,8 +20,8 @@ At-risk customers: 1,303 | 50,000 simulated arrivals x 3 seeds
 |:----------------------------|-------------------------:|---------------------:|--------------------:|
 | Always NO_OFFER             |                  472.175 |                0.029 |              20.53  |
 | Business rule               |                  484.257 |                0.804 |               8.449 |
-| LinUCB (learned)            |                  489.72  |                0.767 |               2.986 |
-| Thompson sampling (learned) |                  475.303 |                0.276 |              17.402 |
+| LinUCB (learned)            |                  489.891 |                0.777 |               2.814 |
+| Thompson sampling (learned) |                  489.606 |                0.784 |               3.099 |
 | Oracle                      |                  492.705 |                1     |               0     |
 
 ## Simulator assumptions
