@@ -40,3 +40,18 @@ Never mention churn, risk scores, probabilities, models, segments, revenue at ri
 State offers exactly as defined in the catalog, including the exact discount percentage and duration.
 Do not invent deadlines, prices, or extra perks.
 Acknowledge the customer's problem before presenting any offer.
+
+## Resolving the customer's issue first
+
+Every reply must first resolve or route the customer's stated issue, and only then present a retention offer.
+A customer who reports a billing problem always receives a BILLING_REVIEW, whether or not the anomaly detector flagged the account. It is a service action, not an incentive, and it can be combined with one retention offer.
+Customers asking a simple question get a direct answer. Low- and medium-risk customers asking simple questions receive no incentive.
+Retention offers are optional and are mentioned after the issue is handled, in one sentence.
+
+## Customer FAQ
+
+Invoices: customers can view and download invoices in My Account, under Billing, then Invoices.
+Payment method: customers can update their card or bank details in My Account, under Billing, then Payment methods.
+Outages: current outages are shown on the service status page, and affected customers can request a service credit from support.
+Cancellation fees: month-to-month plans have no cancellation fee. One- and two-year contracts have an early termination fee shown in My Account under Plan.
+Support: live chat is available 24/7 in the app, and phone support is available 8am to 8pm.

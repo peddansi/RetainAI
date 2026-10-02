@@ -139,11 +139,18 @@ class LinUCB:
     def __init__(self, d, alpha=1.0, lam=1.0):
         self.name, self.alpha = f"LinUCB (alpha={alpha})", alpha
         self.A_inv = np.stack([np.eye(d) / lam for _ in ARMS]); self.b = np.zeros((len(ARMS), d))
+        self.n, self.mean_reward = 0, 0.0
     def select(self, i, x, eligible):
         theta = np.einsum("kij,kj->ki", self.A_inv, self.b)
         ucb = theta @ x + self.alpha * np.sqrt(np.einsum("i,kij,j->k", x, self.A_inv, x))
         return int(np.argmax(np.where(eligible, ucb, -np.inf)))
     def update(self, x, arm, r):
+        # Center rewards with a running mean so the zero prior is neutral, not pessimistic.
+        # Without this, all-positive rewards make untried offers look worse than the first lucky one,
+        # and exploration can lock in early.
+        self.n += 1
+        self.mean_reward += (r - self.mean_reward) / self.n
+        r = r - self.mean_reward
         Ax = self.A_inv[arm] @ x
         self.A_inv[arm] -= np.outer(Ax, Ax) / (1 + x @ Ax)   # Sherman-Morrison rank-1 update
         self.b[arm] += r * x

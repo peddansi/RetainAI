@@ -1,0 +1,19 @@
+# Core ML
+pandas
+numpy
+scikit-learn
+xgboost
+shap
+lifelines
+joblib
+matplotlib
+tabulate
+# AWS
+boto3
+sagemaker>=2.200,<3
+# NLP / deep learning
+torch
+transformers
+huggingface_hub
+# App
+streamlit>=1.50

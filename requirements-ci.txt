@@ -1,0 +1,7 @@
+pandas
+numpy
+scikit-learn
+boto3
+joblib
+pytest
+ruff
