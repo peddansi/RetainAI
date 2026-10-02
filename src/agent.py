@@ -56,6 +56,8 @@ NEXT_STEPS = {
     "ANSWER_QUESTION": "Answer the question directly using the Customer FAQ from search_policy.",
     "PROACTIVE_CHECK_IN": "Thank the customer for being with us and check whether everything is working well.",
 }
+READABLE = {"OnlineSecurity": "Online Security", "OnlineBackup": "Online Backup", "DeviceProtection": "Device Protection",
+            "TechSupport": "Tech Support", "StreamingTV": "Streaming TV", "StreamingMovies": "Streaming Movies"}
 INTERNAL_TERMS = ["churn", "probability", "risk score", "model", "segment", "revenue at risk", "algorithm", "shap"]
 # Each inner list must have at least one word present in the message
 RESOLUTION_CUES = {
@@ -84,6 +86,40 @@ def message_signals(text, intent, confidence=1.0):
 
 def _path(*parts):
     return os.path.join(ROOT, *parts)
+
+
+def customer_facts(r):
+    """Facts that are safe and natural to mention to the customer (no scores or internal labels)."""
+    addons = [READABLE[a] for a in READABLE if r[a] == "Yes"]
+    facts = [f"has been with us for {int(r['tenure'])} months", f"is on a {r['Contract'].lower()} plan",
+             f"current monthly bill is ${float(r['MonthlyCharges']):.2f}"]
+    if r["InternetService"] != "No":
+        facts.append(f"has {r['InternetService']} internet" + (f" with {', '.join(addons)}" if addons else ""))
+    change = (float(r["MonthlyCharges"]) - float(r["avg_monthly_spend"])) / max(float(r["avg_monthly_spend"]), 1)
+    if change >= 0.05:
+        facts.append(f"current bill is {change:.0%} higher than their average so far")
+    return facts
+
+
+def offer_benefit(offer, bill):
+    """The concrete value of an offer for this customer, computed in code so the LLM never does the math."""
+    code = offer.get("code")
+    if code == "CONTRACT_UPGRADE":
+        save = bill * offer["discount_pct"] / 100
+        return (f"saves ${save:.2f} per month (about ${save * 12:.0f} over the year), "
+                f"bringing the monthly bill from ${bill:.2f} to ${bill - save:.2f}")
+    if code == "LOYALTY_DISCOUNT":
+        save = bill * offer["discount_pct"] / 100
+        return f"saves ${save:.2f} per month for 6 months (${save * 6:.0f} in total)"
+    if code == "ADDON_TRIAL":
+        return f"adds {READABLE.get(offer['add_on'], offer['add_on'])} at no cost for 3 months"
+    return ""
+
+
+def allowed_dollar_amounts(plan, bill):
+    """Every dollar figure the reply may contain: the bill, the computed savings, and the $25 credit."""
+    text = " ".join([plan.get("offer_benefit", ""), plan.get("resolution_next_step", "")] + plan.get("customer_facts", []))
+    return {float(x.replace(",", "")) for x in re.findall(r"\$([\d,]+(?:\.\d+)?)", text)} | {round(bill, 2), 25.0}
 
 
 def risk_band(p):
@@ -247,8 +283,11 @@ class Toolbox:
             offer, why = best_incentive, f"{band} risk: best incentive by {source}"
 
         escalate = bool(escalate)
+        bill = float(r["MonthlyCharges"])
+        chosen = next((o for o in offers if o["code"] == offer), {})
         plan = {"resolution": resolution, "resolution_next_step": NEXT_STEPS[resolution],
-                "offer_code": offer, "offer_description": next((o["description"] for o in offers if o["code"] == offer), ""),
+                "offer_code": offer, "offer_description": chosen.get("description", ""),
+                "offer_benefit": offer_benefit(chosen, bill), "customer_facts": customer_facts(r),
                 "escalate_to_human": escalate, "why": why}
         return {"message_intent": intent, "risk_band": band, "eligible_offers": offers, "max_discount_pct": cap,
                 "bandit_values_usd": values, "rules_applied": rules, "recommended_plan": plan}
@@ -292,10 +331,13 @@ For each customer:
    use its resolution, offer_code and escalate_to_human values.
 3. If the customer asked a question, call search_policy to find the answer in the Customer FAQ.
 4. Write the customer message, under 120 words, in this order:
-   a) Acknowledge the customer's situation in one sentence.
+   a) Acknowledge the customer's situation in one sentence, personalized with one relevant item from customer_facts.
    b) State the resolution concretely, using resolution_next_step (or the FAQ answer).
-   c) Only if offer_code is not NO_OFFER: present that offer in one sentence, exactly as offer_description says,
-      framed as optional. Do not add any benefit that is not in offer_description.
+   c) Only if offer_code is not NO_OFFER: in one or two sentences, say why the offer suits them and what it is worth,
+      using offer_description and offer_benefit with their exact numbers. Frame it as optional; if the customer
+      reported a problem, present it as something to consider once the problem is sorted.
+   Only use dollar amounts that appear in customer_facts, offer_benefit or resolution_next_step.
+   Do not add any benefit that is not in offer_description.
    Never mention churn, risk, scores, probabilities, models, segments, or internal data.
 Your final answer must be ONLY a JSON object:
 {"risk_level": "high|medium|low", "key_reasons": ["short internal notes"], "resolution": "...",
@@ -392,6 +434,9 @@ def validate(result, toolbox):
     chosen = offers.get(out.get("offer_code"))
     allowed_pcts = {chosen["discount_pct"]} if chosen and "discount_pct" in chosen else set()
     mentioned_pcts = {int(x) for x in re.findall(r"(\d+)\s?%", msg)}
+    allowed_dollars = allowed_dollar_amounts(plan, float(toolbox.customers.loc[result["customer_id"], "MonthlyCharges"])) \
+        if hasattr(toolbox, "customers") else None
+    mentioned_dollars = {float(x.replace(",", "")) for x in re.findall(r"\$([\d,]+(?:\.\d+)?)", msg)}
 
     passed_message = (not result["message"]) or any(
         (t["input"] or {}).get("customer_message", "").strip() for t in rec_calls)
@@ -405,6 +450,8 @@ def validate(result, toolbox):
                         and bool(out.get("escalate_to_human")) == plan["escalate_to_human"],
         "resolution_mentioned": all(any(w in msg.lower() for w in group) for group in cues),
         "discount_within_policy": mentioned_pcts <= allowed_pcts,
+        "no_invented_numbers": allowed_dollars is None or all(
+            any(abs(m - a) <= 0.5 for a in allowed_dollars) for m in mentioned_dollars),
         "no_internal_terms": not any(term in msg.lower() for term in INTERNAL_TERMS),
         "no_invented_perks": not any(p in msg.lower() for p in INVENTED_PERKS),
         "escalation_correct": (not plan["escalate_to_human"]) or out.get("escalate_to_human") is True,

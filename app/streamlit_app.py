@@ -75,6 +75,8 @@ with tab_console:
     r = customers.loc[cid]
     score = live_score(cid)
     seg = segment_stats.loc[r["segment"]]
+    rec = tools.recommend_offer(cid, message)
+    plan = rec["recommended_plan"]
 
     # ---------------------------------------------------------------- history & metrics
     st.subheader("Customer history & metrics")
@@ -87,7 +89,9 @@ with tab_console:
     m[3].metric("Churn probability", f"{score['churn_probability']:.0%}",
                 f"{score['churn_probability'] - seg['seg_churn']:+.0%} vs segment", delta_color="inverse")
     m[4].metric("Revenue at risk (12m)", f"${score['revenue_at_risk_12m']:,.0f}")
-    m[5].metric("Expected stay", f"{r['expected_remaining_months']:.0f} more months" if r["Churn"] == 0 else "Churned")
+    savings = next((o for o in rec["eligible_offers"] if o["code"] == plan["offer_code"] and "discount_pct" in o), None)
+    m[5].metric("Savings with offer", f"${r['MonthlyCharges'] * savings['discount_pct'] / 100:.2f}/mo" if savings else "—",
+                plan["offer_code"].replace("_", " ").title() if plan["offer_code"] != "NO_OFFER" else None, delta_color="off")
 
     d1, d2 = st.columns([3, 2])
     with d1:
@@ -103,12 +107,10 @@ with tab_console:
         st.caption(f"Scored live by `{score['scored_by']}`")
     with d2:
         st.bar_chart(pd.Series({"Their average bill": r["avg_monthly_spend"], "Current bill": r["MonthlyCharges"],
-                                "Segment average": seg["seg_monthly"]}, name="USD per month"), height=200)
+                                "Segment average": seg["seg_monthly"]}, name="USD per month"), height=180, horizontal=True)
 
     # ---------------------------------------------------------------- understanding + plan
     st.divider()
-    rec = tools.recommend_offer(cid, message)
-    plan = rec["recommended_plan"]
     p1, p2 = st.columns([2, 3])
     with p1:
         st.subheader("What the customer wants")
@@ -125,7 +127,8 @@ with tab_console:
         a.metric("1 · Resolve", PLAN_LABELS[plan["resolution"]].split(" ", 1)[1])
         b.metric("2 · Offer", plan["offer_code"].replace("_", " ").title())
         c.metric("Escalate", "Yes" if plan["escalate_to_human"] else "No")
-        st.caption(f"Why: {plan['why']}. Offer: {plan['offer_description'] or 'none'}")
+        st.caption(f"Why: {plan['why']}. Offer: {plan['offer_description'] or 'none'}"
+                   + (f" — {plan['offer_benefit']}" if plan["offer_benefit"] else ""))
 
     with st.expander("Policy details: allowed offers, rules, learned offer values"):
         e1, e2 = st.columns(2)

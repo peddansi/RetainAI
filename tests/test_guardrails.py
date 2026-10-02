@@ -104,3 +104,18 @@ def test_parse_json_returns_none_for_garbage():
 
 def test_risk_band_thresholds():
     assert [risk_band(p) for p in (0.1, 0.3, 0.59, 0.6)] == ["low", "medium", "medium", "high"]
+
+
+def test_offer_benefit_is_computed_in_code():
+    from agent import offer_benefit
+    text = offer_benefit({"code": "CONTRACT_UPGRADE", "discount_pct": 10}, 100.0)
+    assert "$10.00 per month" in text and "$90.00" in text
+    assert "$15.00 per month" in offer_benefit({"code": "LOYALTY_DISCOUNT", "discount_pct": 15}, 100.0)
+    assert offer_benefit({"code": "NO_OFFER"}, 100.0) == ""
+
+
+def test_allowed_dollar_amounts():
+    from agent import allowed_dollar_amounts
+    plan = {"offer_benefit": "saves $10.79 per month (about $130 over the year)", "resolution_next_step": "",
+            "customer_facts": ["current monthly bill is $107.95"]}
+    assert {10.79, 130.0, 107.95, 25.0} <= allowed_dollar_amounts(plan, 107.95)
