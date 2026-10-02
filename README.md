@@ -114,6 +114,8 @@ v2 evaluation (plan engine, 11 scenarios, Nova 2 Lite vs Nova Pro vs Nova Micro)
 
 ### Block 5 — Reinforcement learning for offer optimization ([`05_bandit.ipynb`](05_bandit.ipynb), [`src/bandit.py`](src/bandit.py))
 
+### Block 5 — Reinforcement learning for offer optimization ([`05_bandit.ipynb`](05_bandit.ipynb), [`src/bandit.py`](src/bandit.py))
+
 Contextual bandits (LinUCB and linear Thompson sampling, implemented from scratch) learn which offer maximizes 12-month net revenue per customer, constrained by the same policy engine as the agent. **Customer responses are simulated** from churn-model what-ifs plus explicit assumptions (acceptance rates, costs, 50% causal shrinkage); all assumptions are listed in [the results](docs/bandit_results.md).
 
 | Policy (50,000 arrivals × 3 seeds) | Net revenue / customer | Lift vs no offer | Regret / customer (last 10K) |
@@ -121,15 +123,24 @@ Contextual bandits (LinUCB and linear Thompson sampling, implemented from scratc
 | Always NO_OFFER | $473.44 | — | $20.52 |
 | Always LOYALTY_DISCOUNT | $452.32 | **−$21.12** | $41.75 |
 | Business rule | $485.39 | +$11.95 | $8.50 |
-| **LinUCB** | $485.10 | +$11.66 | **$6.87** |
-| Thompson sampling | $477.18 | +$3.74 | $12.71 |
+| LinUCB | $484.94 | +$11.51 | $8.02 |
+| **Thompson sampling** | $483.78 | +$10.34 | **$7.10** |
 | Oracle (knows true effects) | $493.78 | +$20.34 | $0 |
+
+Value of the final learned policies (noise-free):
+
+| Policy | Value / customer | Agrees with oracle | Gap to oracle |
+|---|---|---|---|
+| Business rule | $484.26 | 80.4% | $8.45 |
+| **LinUCB (learned)** | **$489.89** | 77.7% | **$2.81** |
+| Thompson sampling (learned) | $489.61 | 78.4% | $3.10 |
+| Oracle | $492.71 | 100% | $0 |
 
 Findings:
 - **Blanket discounts destroy value**: paying people who would have stayed anyway.
-- **A good business rule is a strong baseline.** LinUCB starts behind and overtakes it after ~12K customers; the learned policy agrees with the oracle less often than the rule but makes its mistakes on low-stakes customers.
-- **Low-spend customers are hardest to learn**, because small dollar differences are buried in stay/leave noise.
-- **A unit test caught a real bug**: with all-positive rewards and a zero prior, bandits could lock in early, which likely explains Thompson sampling's plateau. Fixed by centering rewards (see `LinUCB.update`). The table above was produced before the fix; re-running with it is pending.
+- **A good business rule is a strong baseline.** The bandits start behind it and pay an exploration cost, then overtake it (LinUCB after ~22K customers, Thompson sampling after ~27K). Once trained, they close about two-thirds of the rule's gap to the oracle.
+- **The learned policies agree with the oracle *less* often than the rule, yet earn more**, because their mistakes fall on low-stakes customers.
+- **A unit test caught a real bug.** With all-positive rewards and a zero prior, bandits could lock in early. Centering rewards fixed it: Thompson sampling's late-stage regret fell 44% ($12.71 → $7.10), turning it from the weakest learner into the strongest, and the learned policy's choices for low-spend customers moved much closer to the oracle's.
 
 ![Bandit learning curves](docs/images/bandit_learning_curves.png)
 
