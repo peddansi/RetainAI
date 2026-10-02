@@ -1,3 +1,4 @@
+# RetainAI
 # 🛡️ RetainAI — Autonomous Customer Retention Platform on AWS
 
 ![CI](https://github.com/peddansi/RetainAI/actions/workflows/ci.yml/badge.svg)
@@ -95,7 +96,8 @@ The agent calls five tools: customer profile, **live score from the production e
 - **v1 let the LLM choose the offer.** It passed every guardrail, yet hands-on testing in the dashboard showed it was tone-deaf: a high-risk customer reporting a billing error got no help with the bill, just a pitch for a 12-month contract, with an invented "lock in your rate" perk. Guardrails guarantee *safety*, not *quality*.
 - **Diagnosis:** (1) the policy only allowed a bill review when the anomaly detector fired, so the agent had no legitimate way to help; (2) the prompt never said "fix the problem first"; (3) the bandit's learned offer values never reached the agent; (4) a basic model has weak judgment about tone.
 - **v2 moved decisions into a plan engine.** It combines the customer's risk, the message (intent model, trusted only above 50% confidence, plus keyword signals for billing problems, wanting to leave, and complaints), company policy, and the **Block 5 bandit's learned offer values** to decide: the resolution step, the offer, and whether to escalate. A customer who *says* they're leaving is treated as high risk even if the model disagrees. The LLM writes the reply in a fixed order: acknowledge, resolve, then optionally offer.
-- **The validator grew from 7 to 10 checks**, adding: follows the plan, mentions the resolution, and no invented perks. It recomputes the plan from the real message, so the model can't sidestep it by paraphrasing.
+- **v2 replies were correct but generic.** The live judge score in the dashboard showed personalization at 2/5: the reply never used what we know about the customer or said why the offer suited them. The plan engine now passes **customer-safe facts** (tenure, plan, bill) and the offer's **benefit computed in code** ("saves $10.79 per month, about $130 over the year"), so the LLM personalizes without doing any math.
+- **The validator grew from 7 to 11 checks**, adding: follows the plan, mentions the resolution, no invented perks, and **no invented dollar amounts** (every $ figure must come from the plan). It recomputes the plan from the real message, so the model can't sidestep it by paraphrasing.
 
 v1 evaluation (LLM chooses offers):
 
@@ -106,7 +108,9 @@ v1 evaluation (LLM chooses offers):
 
 Judge: Meta Llama 3.3 70B (a different model family, to avoid self-preference bias).
 
-Finding: the model with the lower per-token price used ~3× the output tokens and nearly twice the latency, so it wasn't cheaper per task. Compare models on cost and quality *per completed task*, not price per token. The validator blocked 1 of 10 Nova 2 Lite responses from reaching a customer. See [example transcripts](docs/agent_examples.md).
+Finding: the model with the lower per-token price used ~3× the output tokens and nearly twice the latency, so it wasn't cheaper per task. Compare models on cost and quality *per completed task*, not price per token. The validator blocked 1 of 10 Nova 2 Lite responses from reaching a customer.
+
+v2 evaluation (plan engine, 11 scenarios, Nova 2 Lite vs Nova Pro vs Nova Micro) is the next step; the notebook is ready to run.
 
 ### Block 5 — Reinforcement learning for offer optimization ([`05_bandit.ipynb`](05_bandit.ipynb), [`src/bandit.py`](src/bandit.py))
 
@@ -125,14 +129,14 @@ Findings:
 - **Blanket discounts destroy value**: paying people who would have stayed anyway.
 - **A good business rule is a strong baseline.** LinUCB starts behind and overtakes it after ~12K customers; the learned policy agrees with the oracle less often than the rule but makes its mistakes on low-stakes customers.
 - **Low-spend customers are hardest to learn**, because small dollar differences are buried in stay/leave noise.
-- **A unit test caught a real bug**: with all-positive rewards and a zero prior, bandits could lock in early. Fixed by centering rewards (see `LinUCB.update`).
+- **A unit test caught a real bug**: with all-positive rewards and a zero prior, bandits could lock in early, which likely explains Thompson sampling's plateau. Fixed by centering rewards (see `LinUCB.update`). The table above was produced before the fix; re-running with it is pending.
 
 ![Bandit learning curves](docs/images/bandit_learning_curves.png)
 
 ### Block 6 — Dashboard, tests, CI
 
-- **Streamlit dashboard** ([`app/streamlit_app.py`](app/streamlit_app.py)): enter a customer ID to see their history and metrics (tenure, lifetime revenue, current bill vs their average, churn probability vs their segment, expected remaining lifetime, SHAP risk drivers), paste their message to see what they want and the recommended plan, then have the agent write the reply, with guardrail results and a live quality score from the judge model.
-- **33 automated tests** ([`tests/`](tests/)) run on every push via GitHub Actions: training/serving parity, every guardrail violation type, message understanding (billing problem, leaving, complaint, low-confidence intents), JSON parsing of different model output styles, bandit learning and eligibility, and the Lambda handler with a mocked endpoint. No AWS access needed.
+- **Streamlit dashboard** ([`app/streamlit_app.py`](app/streamlit_app.py)): enter a customer ID to see their history and metrics (tenure, lifetime revenue, current bill vs their average, churn probability vs their segment, savings under the recommended offer, SHAP risk drivers), paste their message to see what they want and the recommended plan, then have the agent write the reply, with guardrail results and a live quality score from the judge model.
+- **35 automated tests** ([`tests/`](tests/)) run on every push via GitHub Actions: training/serving parity, every guardrail violation type, message understanding (billing problem, leaving, complaint, low-confidence intents), JSON parsing of different model output styles, bandit learning and eligibility, and the Lambda handler with a mocked endpoint. No AWS access needed.
 
 ---
 
@@ -155,15 +159,4 @@ Findings:
 
 1. Open SageMaker Studio (JupyterLab), clone the repo, and run the notebooks in order. Notebook 01 downloads the public Telco dataset; notebook 03 downloads the Bitext dataset from Hugging Face.
 2. Block 2 deploys a serverless endpoint; the Lambda function is created in the console (steps in the notebook).
-3. Block 4 needs Bedrock access for the models listed at the top of `src/agent.py`. Any Bedrock model with tool use can be swapped in.
-4. Dashboard: `streamlit run app/streamlit_app.py --server.port 8501`.
-5. Tests: `pip install -r requirements-ci.txt && pytest -q`.
-
-**Cost:** the serverless endpoint and Lambda cost nothing when idle. Stop the Studio space when finished.
-
-## Limitations and next steps
-
-- Offer effects are **simulated**; in production the simulator would be replaced by randomized A/B tests, and the bandit would run on real outcomes.
-- The support-message dataset is general e-commerce and largely template-generated; real telecom messages would be noisier.
-- The agent evaluation uses 10 scenarios; a production eval set would be larger and include adversarial inputs.
-- Next: infrastructure as code (CDK), SageMaker Model Monitor for drift, GPU training job for DistilBERT, and an API Gateway front end with authentication.
+3. Block 4
