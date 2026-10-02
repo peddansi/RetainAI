@@ -60,6 +60,10 @@ def build_frame(df):
         d["avg_monthly_spend"] = np.where(d["tenure"] > 0, d["TotalCharges"] / d["tenure"], d["MonthlyCharges"])
     d["charge_shock"] = d["MonthlyCharges"] - d["avg_monthly_spend"]
     d["is_month_to_month"] = (d["Contract"] == "Month-to-month").astype(int)
-    y = (d["Churn"] == "Yes").astype(int) if d["Churn"].dtype == object else d["Churn"].astype(int)
+    # Works on pandas 2 (text stored as object) and pandas 3 (dedicated string dtype)
+    if pd.api.types.is_numeric_dtype(d["Churn"]) or pd.api.types.is_bool_dtype(d["Churn"]):
+        y = d["Churn"].astype(int)
+    else:
+        y = d["Churn"].astype(str).str.strip().eq("Yes").astype(int)
     X = pd.get_dummies(d[RAW_FIELDS + ENGINEERED], drop_first=True).astype(float)
     return X, y
