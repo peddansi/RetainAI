@@ -123,7 +123,18 @@ The agent calls five tools: customer profile, **live score from the production e
 - The model with the lower per-token price used ~3× the output tokens and nearly twice the latency, so it wasn't cheaper per task. Compare models on cost and quality *per completed task*, not price per token.
 - The validator blocked 1 of 10 Nova 2 Lite responses from reaching a customer.
 
-The v2 evaluation (11 scenarios, Nova 2 Lite vs Nova Pro vs Nova Micro) is ready to run in the notebook.
+**v2 evaluation** (plan engine, 11 scenarios, 11 guardrail checks; same judge):
+
+| Model | Guardrail compliance | Judge score (1–5) | Latency | Tokens in / out | Tool calls |
+|---|---|---|---|---|---|
+| Amazon Nova 2 Lite | 82% | **4.14** | **2.0 s** | 4,643 / 277 | 3.5 |
+| Amazon Nova Pro | **100%** | 3.96 | 3.7 s | 3,752 / 357 | 3.3 |
+| Amazon Nova Micro | 91% | 3.96 | 2.7 s | 4,026 / 510 | 3.3 |
+
+- **Reply quality rose for every model** (judge score +0.5 for both Nova 2 Lite and Nova Micro versus v1): replies now resolve the issue first, use the customer's real details, and quote savings computed in code.
+- **Compliance is measured against a stricter bar** (11 checks vs 7). Both Nova 2 Lite failures came from the new no-invented-perks check, the exact problem v1 had; in v2 those replies were blocked before reaching a customer.
+- **Nova Pro was the only model with zero guardrail failures.** A practical production setup: use Nova 2 Lite for its quality and speed, and retry once (or fall back to Nova Pro) when a reply fails a guardrail.
+- Scenario sets differ between v1 and v2 (10 vs 11), so judge quality is the fairer comparison than compliance rate.
 
 ### Block 5 — Reinforcement learning for offer optimization
 
@@ -211,4 +222,4 @@ These are the moments where testing changed the outcome:
 - The support-message dataset is general e-commerce and largely template-generated; real telecom messages would be noisier.
 - The survival model ranks customers well (concordance 0.86), but its absolute "months remaining" estimates are not calibrated, so the dashboard does not display them.
 - The agent evaluation uses 10–11 scenarios; a production evaluation set would be larger and include adversarial inputs.
-- **Next:** run the v2 agent evaluation, add dashboard screenshots, infrastructure as code (CDK), SageMaker Model Monitor for drift, and an authenticated API Gateway front end.
+- **Next:** pluralize customer facts ("1 month", not "1 months"), validate the `resolution` field against the plan's code, retry-on-guardrail-failure with model fallback, dashboard screenshots, infrastructure as code (CDK), SageMaker Model Monitor for drift, and an authenticated API Gateway front end.
